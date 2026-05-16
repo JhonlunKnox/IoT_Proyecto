@@ -245,7 +245,8 @@
 
   function formatHora(ts) {
     if (!ts) return '—';
-    const d = new Date(ts.endsWith('Z') ? ts : ts + 'Z');
+    const tsFixed = ts.includes('Z') || ts.includes('+') ? ts : ts + 'Z';
+    const d = new Date(tsFixed);
     return d.toLocaleString('es-CO', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
   }
 
