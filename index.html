@@ -3,369 +3,833 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PlantSense Dashboard</title>
+<title>PlantSense — Monitor de Plantas IoT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1a10; color: #e8f5e9; min-height: 100vh; }
+:root {
+  --bg:        #080f09;
+  --surface:   #0d1a0e;
+  --surface2:  #112013;
+  --border:    #1c3320;
+  --border2:   #254529;
+  --accent:    #4ade80;
+  --accent2:   #22c55e;
+  --accent3:   #16a34a;
+  --muted:     #3d6b47;
+  --text:      #e2ffe8;
+  --text2:     #9dbfa4;
+  --text3:     #5a8a63;
+  --warn:      #fb923c;
+  --danger:    #f87171;
+  --lux:       #fbbf24;
+  --radius:    12px;
+  --radius-lg: 20px;
+}
 
-  header {
-    background: #1b2e1c; border-bottom: 1px solid #2e5030;
-    padding: 1rem 2rem; display: flex; align-items: center; gap: 0.75rem;
-  }
-  header h1 { font-size: 1.4rem; font-weight: 600; color: #81c784; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-  .status-bar {
-    padding: 0.5rem 2rem; font-size: 0.8rem; color: #66bb6a;
-    background: #142016; border-bottom: 1px solid #1e3a20;
-  }
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
 
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.25rem; padding: 1.5rem 2rem;
-    max-width: 1400px; margin: 0 auto;
-  }
+/* Noise texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
 
-  .card {
-    background: #1b2e1c; border: 1px solid #2e5030;
-    border-radius: 12px; padding: 1.25rem;
-  }
-  .card-title {
-    font-size: 0.75rem; text-transform: uppercase;
-    letter-spacing: 0.08em; color: #66bb6a; margin-bottom: 0.75rem;
-  }
-  .metric { font-size: 2.5rem; font-weight: 700; line-height: 1; margin-bottom: 0.25rem; }
-  .metric-sub { font-size: 0.85rem; color: #81c784; opacity: 0.7; }
+/* ── HEADER ─────────────────────────────────────────── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,15,9,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  display: flex; align-items: center; gap: 1rem;
+  height: 60px;
+}
 
-  .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-top: 0.5rem; }
-  .badge-ok      { background: #1b4332; color: #52b788; }
-  .badge-alerta  { background: #3d1f00; color: #ffb347; }
-  .badge-critico { background: #3d0000; color: #ff6b6b; }
+.logo {
+  display: flex; align-items: center; gap: 0.6rem;
+}
 
-  .gauge-bar { height: 8px; background: #0f1a10; border-radius: 4px; margin: 0.5rem 0; overflow: hidden; }
-  .gauge-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+.logo-icon {
+  width: 28px; height: 28px;
+  background: var(--accent3);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 0 20px rgba(74,222,128,0.3);
+}
 
-  /* Foto de la planta */
-  .foto-card { grid-column: span 2; }
-  .foto-wrapper {
-    width: 100%; aspect-ratio: 4/3; background: #0f1a10;
-    border-radius: 8px; overflow: hidden; display: flex;
-    align-items: center; justify-content: center;
-    border: 1px solid #2e5030;
-  }
-  .foto-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-  .foto-placeholder { color: #2e5030; font-size: 3rem; }
-  .foto-meta { font-size: 0.75rem; color: #66bb6a; opacity: 0.6; margin-top: 0.5rem; }
+.logo-text {
+  font-size: 1rem; font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
 
-  /* Estado general */
-  .estado-general { grid-column: 1 / -1; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
-  .estado-icono { font-size: 3.5rem; }
-  .estado-texto h2 { font-size: 1.5rem; margin-bottom: 0.25rem; }
-  .estado-texto p { font-size: 0.9rem; color: #81c784; opacity: 0.8; }
+.logo-text span { color: var(--accent); }
 
-  /* Recomendaciones */
-  .recomendaciones { grid-column: 1 / -1; }
-  .rec-list { list-style: none; }
-  .rec-list li {
-    padding: 0.5rem 0.75rem; margin-bottom: 0.5rem;
-    background: #142016; border-left: 3px solid #52b788;
-    border-radius: 0 6px 6px 0; font-size: 0.9rem;
-  }
-  .rec-list li.alerta { border-left-color: #ffb347; }
+nav { margin-left: auto; display: flex; align-items: center; gap: 1.5rem; }
 
-  /* Historial con fotos */
-  .historial { grid-column: 1 / -1; }
-  .historial-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem; margin-top: 0.75rem;
-  }
-  .historial-item {
-    background: #142016; border: 1px solid #2e5030;
-    border-radius: 8px; overflow: hidden;
-  }
-  .historial-item img {
-    width: 100%; aspect-ratio: 4/3; object-fit: cover;
-    display: block;
-  }
-  .historial-item .no-foto {
-    width: 100%; aspect-ratio: 4/3; background: #0f1a10;
-    display: flex; align-items: center; justify-content: center;
-    color: #2e5030; font-size: 1.5rem;
-  }
-  .historial-item-info { padding: 0.5rem 0.75rem; }
-  .historial-item-info .hora { font-size: 0.72rem; color: #66bb6a; opacity: 0.7; }
-  .historial-item-info .datos { font-size: 0.78rem; margin-top: 0.25rem; }
+.nav-status {
+  display: flex; align-items: center; gap: 0.4rem;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem; color: var(--text3);
+}
 
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; animation: pulse 2s ease-in-out infinite; }
-  .dot-verde   { background: #52b788; }
-  .dot-naranja { background: #ffb347; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.pulse {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s ease-in-out infinite;
+}
+.pulse.offline { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
 
-  .config {
-    position: fixed; bottom: 1rem; right: 1rem;
-    background: #1b2e1c; border: 1px solid #2e5030;
-    border-radius: 12px; padding: 1rem; font-size: 0.8rem; min-width: 220px;
-  }
-  .config input {
-    width: 100%; background: #0f1a10; border: 1px solid #2e5030;
-    color: #e8f5e9; padding: 0.3rem 0.5rem; border-radius: 6px;
-    margin: 0.3rem 0 0.6rem; font-size: 0.8rem;
-  }
-  .config button {
-    width: 100%; background: #2e7d32; color: white;
-    border: none; padding: 0.4rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
-  }
-  .config button:hover { background: #388e3c; }
+.nav-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem; color: var(--muted);
+  border-left: 1px solid var(--border); padding-left: 1.5rem;
+}
+
+/* ── LAYOUT ──────────────────────────────────────────── */
+main {
+  position: relative; z-index: 1;
+  max-width: 1400px; margin: 0 auto;
+  padding: 2rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  grid-template-rows: auto;
+  gap: 1rem;
+}
+
+/* ── CARDS ───────────────────────────────────────────── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s, transform 0.2s;
+}
+.card:hover { border-color: var(--border2); transform: translateY(-1px); }
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(74,222,128,0.03) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.card-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--text3); margin-bottom: 1rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+
+.card-label-dot {
+  width: 4px; height: 4px; border-radius: 50%;
+  background: var(--accent);
+}
+
+/* ── HERO CARD (estado general) ──────────────────────── */
+.card-hero {
+  grid-column: 1 / 3;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+  border-color: var(--border2);
+  display: flex; align-items: center; gap: 2rem;
+  padding: 2rem;
+}
+
+.hero-icon {
+  font-size: 4rem; line-height: 1;
+  filter: drop-shadow(0 0 30px rgba(74,222,128,0.4));
+  flex-shrink: 0;
+}
+
+.hero-content { flex: 1; }
+
+.hero-status {
+  font-size: 0.65rem; font-family: 'DM Mono', monospace;
+  text-transform: uppercase; letter-spacing: 0.15em;
+  color: var(--accent); margin-bottom: 0.4rem;
+}
+
+.hero-title {
+  font-size: 1.8rem; font-weight: 700;
+  letter-spacing: -0.03em; line-height: 1.1;
+  margin-bottom: 0.3rem;
+}
+
+.hero-sub {
+  font-size: 0.8rem; color: var(--text3);
+  font-family: 'DM Mono', monospace;
+}
+
+.hero-tags {
+  display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;
+}
+
+.tag {
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.65rem; font-weight: 600;
+  font-family: 'DM Mono', monospace;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.tag-ok     { background: rgba(74,222,128,0.1); color: var(--accent); border: 1px solid rgba(74,222,128,0.2); }
+.tag-warn   { background: rgba(251,146,60,0.1);  color: var(--warn);   border: 1px solid rgba(251,146,60,0.2); }
+.tag-danger { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+
+/* ── FOTO CARD ───────────────────────────────────────── */
+.card-foto {
+  grid-column: 3 / 5;
+  padding: 0; overflow: hidden;
+}
+
+.foto-inner {
+  position: relative;
+  width: 100%; aspect-ratio: 16/9;
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.foto-inner img {
+  width: 100%; height: 100%; object-fit: cover;
+  display: none;
+}
+
+.foto-placeholder {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 0.5rem;
+  color: var(--text3);
+}
+.foto-placeholder span:first-child { font-size: 2rem; }
+.foto-placeholder span:last-child { font-size: 0.75rem; font-family: 'DM Mono', monospace; }
+
+.foto-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(transparent, rgba(8,15,9,0.9));
+  display: flex; align-items: flex-end; justify-content: space-between;
+}
+
+.foto-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem; color: var(--text3);
+  text-transform: uppercase; letter-spacing: 0.1em;
+}
+
+.foto-time {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem; color: var(--accent);
+}
+
+/* ── METRIC CARDS ────────────────────────────────────── */
+.metric-value {
+  font-size: 3rem; font-weight: 800;
+  letter-spacing: -0.04em; line-height: 1;
+  margin-bottom: 0.2rem;
+}
+.metric-unit { font-size: 1.2rem; font-weight: 400; color: var(--text3); }
+.metric-desc { font-size: 0.75rem; color: var(--text3); font-family: 'DM Mono', monospace; margin-bottom: 1rem; }
+
+.bar-track {
+  height: 4px; background: var(--border);
+  border-radius: 2px; overflow: hidden; margin-bottom: 0.75rem;
+}
+.bar-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 1s cubic-bezier(0.4,0,0.2,1);
+}
+
+.metric-tag { display: inline-flex; align-items: center; gap: 0.3rem; }
+
+/* ── VISUAL CARD ─────────────────────────────────────── */
+.visual-estado {
+  font-size: 2.5rem; margin-bottom: 0.5rem;
+  filter: drop-shadow(0 0 15px rgba(74,222,128,0.3));
+}
+.visual-name { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
+
+.color-bars { display: flex; flex-direction: column; gap: 0.4rem; }
+.color-row { display: flex; align-items: center; gap: 0.75rem; }
+.color-label { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--text3); width: 60px; }
+.color-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.color-fill { height: 100%; border-radius: 3px; transition: width 1s ease; }
+.color-val { font-family: 'DM Mono', monospace; font-size: 0.65rem; color: var(--text3); width: 32px; text-align: right; }
+
+/* ── RECOMENDACIONES ─────────────────────────────────── */
+.card-recs { grid-column: 1 / 3; }
+.rec-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+.rec-item {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.82rem;
+  transition: border-color 0.2s;
+}
+.rec-item.warn  { border-color: rgba(251,146,60,0.3);  background: rgba(251,146,60,0.05); }
+.rec-item.ok    { border-color: rgba(74,222,128,0.2);  background: rgba(74,222,128,0.04); }
+
+/* ── GRÁFICAS ────────────────────────────────────────── */
+.card-chart { grid-column: span 2; }
+.chart-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.chart-tabs { display: flex; gap: 0.25rem; }
+.chart-tab {
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text3);
+  font-family: 'DM Mono', monospace; font-size: 0.65rem;
+  cursor: pointer; transition: all 0.2s;
+}
+.chart-tab.active { background: var(--accent3); color: var(--text); border-color: var(--accent3); }
+.chart-wrapper { position: relative; height: 160px; }
+
+/* ── HISTORIAL ───────────────────────────────────────── */
+.card-historial { grid-column: 1 / -1; }
+.historial-scroll {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.hist-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.2s;
+}
+.hist-item:hover { border-color: var(--border2); transform: translateY(-2px); }
+.hist-foto {
+  width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block;
+  background: var(--bg);
+}
+.hist-no-foto {
+  width: 100%; aspect-ratio: 4/3;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text3); font-size: 1.25rem;
+  background: var(--bg);
+}
+.hist-info { padding: 0.5rem 0.6rem; }
+.hist-hora { font-family: 'DM Mono', monospace; font-size: 0.6rem; color: var(--text3); }
+.hist-datos { font-size: 0.7rem; margin-top: 0.2rem; color: var(--text2); }
+
+/* ── CONFIG ──────────────────────────────────────────── */
+.config-btn {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  width: 40px; height: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem; color: var(--text3);
+  transition: all 0.2s; z-index: 200;
+}
+.config-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.config-panel {
+  position: fixed; bottom: 4.5rem; right: 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem; width: 260px;
+  z-index: 200; display: none;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.config-panel.open { display: block; animation: slideUp 0.2s ease; }
+@keyframes slideUp { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+
+.config-label { font-size: 0.65rem; font-family: 'DM Mono', monospace; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 0.4rem; }
+.config-input {
+  width: 100%; background: var(--bg);
+  border: 1px solid var(--border); color: var(--text);
+  padding: 0.45rem 0.6rem; border-radius: 8px;
+  font-family: 'DM Mono', monospace; font-size: 0.75rem;
+  margin-bottom: 0.75rem; outline: none;
+  transition: border-color 0.2s;
+}
+.config-input:focus { border-color: var(--accent); }
+.config-save {
+  width: 100%; background: var(--accent3); color: var(--text);
+  border: none; padding: 0.45rem; border-radius: 8px;
+  font-family: 'Syne', sans-serif; font-weight: 600;
+  font-size: 0.8rem; cursor: pointer; transition: background 0.2s;
+}
+.config-save:hover { background: var(--accent2); }
+
+/* ── LOADING ─────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 </style>
 </head>
 <body>
 
 <header>
-  <span>🌱</span>
-  <h1>PlantSense Dashboard</h1>
-  <div style="margin-left:auto;font-size:0.8rem;color:#66bb6a">
-    <span class="dot dot-verde" id="dot"></span>
-    <span id="conn-status">Conectando...</span>
+  <div class="logo">
+    <div class="logo-icon">🌿</div>
+    <div class="logo-text">Plant<span>Sense</span></div>
   </div>
+  <nav>
+    <div class="nav-status">
+      <div class="pulse" id="pulse-dot"></div>
+      <span id="conn-label">Conectando</span>
+    </div>
+    <div class="nav-time" id="nav-time">—</div>
+  </nav>
 </header>
 
-<div class="status-bar">
-  Última actualización: <span id="ultima-actualizacion">—</span> &nbsp;·&nbsp; Actualizando cada 30s
-</div>
+<main>
 
-<div class="grid">
-
-  <!-- Estado general -->
-  <div class="card estado-general">
-    <div class="estado-icono" id="estado-icono">🌿</div>
-    <div class="estado-texto">
-      <h2 id="estado-texto">Cargando...</h2>
-      <p id="estado-sub">Obteniendo datos</p>
+  <!-- HERO -->
+  <div class="card card-hero">
+    <div class="hero-icon" id="hero-icon">🌿</div>
+    <div class="hero-content">
+      <div class="hero-status" id="hero-status">CARGANDO</div>
+      <div class="hero-title" id="hero-title">Obteniendo datos...</div>
+      <div class="hero-sub" id="hero-sub">—</div>
+      <div class="hero-tags" id="hero-tags"></div>
     </div>
   </div>
 
-  <!-- Foto actual -->
-  <div class="card foto-card">
-    <div class="card-title">📷 Última foto de la planta</div>
-    <div class="foto-wrapper">
-      <img id="foto-actual" src="" alt="Planta" style="display:none">
-      <div class="foto-placeholder" id="foto-placeholder">📷</div>
-    </div>
-    <div class="foto-meta" id="foto-meta">Sin foto disponible</div>
-  </div>
-
-  <!-- Humedad superficial -->
-  <div class="card">
-    <div class="card-title">💧 Humedad Superficial (Raindrop)</div>
-    <div class="metric" id="humedad-pct">—</div>
-    <div class="metric-sub">Porcentaje</div>
-    <div class="gauge-bar"><div class="gauge-fill" id="humedad-bar" style="width:0%;background:#52b788"></div></div>
-    <span class="badge badge-ok" id="humedad-badge">—</span>
-  </div>
-
-  <!-- Humedad suelo -->
-  <div class="card">
-    <div class="card-title">🌱 Humedad del Suelo (Capacitivo)</div>
-    <div class="metric" id="suelo-pct">—</div>
-    <div class="metric-sub">Porcentaje</div>
-    <div class="gauge-bar"><div class="gauge-fill" id="suelo-bar" style="width:0%;background:#52b788"></div></div>
-    <span class="badge badge-ok" id="suelo-badge">—</span>
-  </div>
-
-  <!-- Luz -->
-  <div class="card">
-    <div class="card-title">☀️ Nivel de Luz (BH1750)</div>
-    <div class="metric" id="lux-valor">—</div>
-    <div class="metric-sub">Lux</div>
-    <div class="gauge-bar"><div class="gauge-fill" id="lux-bar" style="width:0%;background:#ffd54f"></div></div>
-    <span class="badge badge-ok" id="lux-badge">—</span>
-  </div>
-
-  <!-- Estado visual -->
-  <div class="card">
-    <div class="card-title">👁️ Estado Visual (OpenCV)</div>
-    <div class="metric" id="estado-visual-icono" style="font-size:2rem">—</div>
-    <div class="metric-sub" id="estado-visual-texto">Sin análisis</div>
-    <div style="margin-top:0.75rem;font-size:0.78rem;color:#81c784;opacity:0.7">
-      Verde: <span id="pct-verde">—</span>% &nbsp;
-      Amarillo: <span id="pct-amarillo">—</span>% &nbsp;
-      Café: <span id="pct-cafe">—</span>%
+  <!-- FOTO -->
+  <div class="card card-foto">
+    <div class="foto-inner">
+      <img id="foto-img" alt="Planta">
+      <div class="foto-placeholder" id="foto-placeholder">
+        <span>📷</span>
+        <span>Sin imagen</span>
+      </div>
+      <div class="foto-overlay">
+        <span class="foto-label">Última captura</span>
+        <span class="foto-time" id="foto-time">—</span>
+      </div>
     </div>
   </div>
 
-  <!-- Recomendaciones -->
-  <div class="card recomendaciones">
-    <div class="card-title">📋 Recomendaciones</div>
-    <ul class="rec-list" id="rec-list"><li>Cargando...</li></ul>
+  <!-- HUMEDAD SUPERFICIAL -->
+  <div class="card">
+    <div class="card-label"><div class="card-label-dot"></div>Humedad Superficial</div>
+    <div class="metric-value" id="m-rain"><span class="metric-unit">%</span></div>
+    <div class="metric-desc">Raindrop MH-RD · Superficie</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-rain" style="width:0%;background:var(--accent)"></div></div>
+    <div class="metric-tag"><span class="tag tag-ok" id="tag-rain">—</span></div>
   </div>
 
-  <!-- Historial con fotos -->
-  <div class="card historial">
-    <div class="card-title">📈 Historial de lecturas</div>
-    <div class="historial-grid" id="historial-grid">
-      <div style="opacity:0.5;font-size:0.85rem">Cargando historial...</div>
+  <!-- HUMEDAD SUELO -->
+  <div class="card">
+    <div class="card-label"><div class="card-label-dot"></div>Humedad del Suelo</div>
+    <div class="metric-value" id="m-suelo"><span class="metric-unit">%</span></div>
+    <div class="metric-desc">Capacitivo · En tierra</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-suelo" style="width:0%;background:var(--accent)"></div></div>
+    <div class="metric-tag"><span class="tag tag-ok" id="tag-suelo">—</span></div>
+  </div>
+
+  <!-- LUZ -->
+  <div class="card">
+    <div class="card-label"><div class="card-label-dot" style="background:var(--lux)"></div>Nivel de Luz</div>
+    <div class="metric-value" id="m-lux" style="color:var(--lux)"><span class="metric-unit">lx</span></div>
+    <div class="metric-desc">BH1750 · Luxómetro digital</div>
+    <div class="bar-track"><div class="bar-fill" id="bar-lux" style="width:0%;background:var(--lux)"></div></div>
+    <div class="metric-tag"><span class="tag tag-ok" id="tag-lux">—</span></div>
+  </div>
+
+  <!-- VISUAL -->
+  <div class="card">
+    <div class="card-label"><div class="card-label-dot" style="background:#a78bfa"></div>Análisis Visual</div>
+    <div class="visual-estado" id="visual-icon">—</div>
+    <div class="visual-name" id="visual-name">Sin datos</div>
+    <div class="color-bars">
+      <div class="color-row">
+        <span class="color-label">Verde</span>
+        <div class="color-track"><div class="color-fill" id="cf-verde" style="width:0%;background:#4ade80"></div></div>
+        <span class="color-val" id="cv-verde">—</span>
+      </div>
+      <div class="color-row">
+        <span class="color-label">Amarillo</span>
+        <div class="color-track"><div class="color-fill" id="cf-amarillo" style="width:0%;background:#fbbf24"></div></div>
+        <span class="color-val" id="cv-amarillo">—</span>
+      </div>
+      <div class="color-row">
+        <span class="color-label">Café</span>
+        <div class="color-track"><div class="color-fill" id="cf-cafe" style="width:0%;background:#92400e"></div></div>
+        <span class="color-val" id="cv-cafe">—</span>
+      </div>
     </div>
   </div>
 
-</div>
+  <!-- RECOMENDACIONES -->
+  <div class="card card-recs">
+    <div class="card-label"><div class="card-label-dot" style="background:var(--warn)"></div>Recomendaciones</div>
+    <ul class="rec-list" id="rec-list"><li class="rec-item">Cargando...</li></ul>
+  </div>
 
-<div class="config">
-  <strong style="color:#66bb6a">⚙️ Backend URL</strong>
-  <input type="text" id="backend-url" placeholder="https://iot-proyecto.onrender.com">
-  <button onclick="guardarConfig()">Conectar</button>
+  <!-- GRÁFICA HUMEDAD -->
+  <div class="card card-chart">
+    <div class="chart-header">
+      <div class="card-label" style="margin:0"><div class="card-label-dot"></div>Tendencia · Humedad</div>
+      <div class="chart-tabs">
+        <button class="chart-tab active" onclick="setChartMode('humedad','rain')">Superficial</button>
+        <button class="chart-tab" onclick="setChartMode('humedad','suelo')">Suelo</button>
+      </div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="chart-humedad"></canvas>
+    </div>
+  </div>
+
+  <!-- GRÁFICA LUZ -->
+  <div class="card card-chart">
+    <div class="chart-header">
+      <div class="card-label" style="margin:0"><div class="card-label-dot" style="background:var(--lux)"></div>Tendencia · Luz (lux)</div>
+    </div>
+    <div class="chart-wrapper">
+      <canvas id="chart-lux"></canvas>
+    </div>
+  </div>
+
+  <!-- HISTORIAL -->
+  <div class="card card-historial">
+    <div class="card-label"><div class="card-label-dot" style="background:var(--text3)"></div>Historial de capturas</div>
+    <div class="historial-scroll" id="historial-grid">
+      <div style="opacity:0.4;font-size:0.8rem;font-family:'DM Mono',monospace">Cargando...</div>
+    </div>
+  </div>
+
+</main>
+
+<button class="config-btn" onclick="toggleConfig()" title="Configuración">⚙</button>
+<div class="config-panel" id="config-panel">
+  <div class="config-label">Backend URL</div>
+  <input class="config-input" id="config-url" type="text" placeholder="https://iot-proyecto.onrender.com">
+  <button class="config-save" onclick="guardarConfig()">Conectar</button>
 </div>
 
 <script>
-  let BACKEND = localStorage.getItem('plantsense_url') || 'https://iot-proyecto.onrender.com';
-  document.getElementById('backend-url').value = BACKEND;
+// ── CONFIG ─────────────────────────────────────────────
+let BACKEND = localStorage.getItem('ps_url') || 'https://iot-proyecto.onrender.com';
+document.getElementById('config-url').value = BACKEND;
 
-  function guardarConfig() {
-    BACKEND = document.getElementById('backend-url').value.replace(/\/$/, '');
-    localStorage.setItem('plantsense_url', BACKEND);
-    fetchEstado(); fetchHistorial();
+function toggleConfig() {
+  document.getElementById('config-panel').classList.toggle('open');
+}
+function guardarConfig() {
+  BACKEND = document.getElementById('config-url').value.replace(/\/$/, '');
+  localStorage.setItem('ps_url', BACKEND);
+  document.getElementById('config-panel').classList.remove('open');
+  fetchAll();
+}
+
+// ── UTILS ──────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const clamp = (v,min,max) => Math.min(Math.max(v,min),max);
+
+function fmt(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts.includes('Z') || ts.includes('+') ? ts : ts + 'Z');
+  return d.toLocaleString('es-CO', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function fmtShort(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts.includes('Z') || ts.includes('+') ? ts : ts + 'Z');
+  return d.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' });
+}
+
+function alertaTag(v) {
+  const map = {
+    ok:          ['tag-ok',   '✓ Normal'],
+    seco:        ['tag-warn', '↓ Seco'],
+    exceso_agua: ['tag-warn', '↑ Exceso agua'],
+    humedo:      ['tag-ok',   '✓ Húmedo'],
+    poca_luz:    ['tag-warn', '↓ Poca luz'],
+    exceso_luz:  ['tag-warn', '↑ Exceso luz'],
+  };
+  return map[v] || ['tag-ok', v || '—'];
+}
+
+function visualInfo(e) {
+  const m = {
+    sana:          { i:'🌿', n:'Planta sana' },
+    amarilla:      { i:'🟡', n:'Hojas amarillas' },
+    cafe:          { i:'🟫', n:'Hojas marrones' },
+    indeterminado: { i:'❓', n:'Indeterminado' },
+    sin_luz:       { i:'🌑', n:'Sin luz suficiente' },
+    sin_datos:     { i:'📷', n:'Sin imagen' },
+  };
+  return m[e] || { i:'—', n: e || '—' };
+}
+
+function barColor(pct, type) {
+  if (type === 'humidity') {
+    if (pct < 20) return 'var(--danger)';
+    if (pct < 40) return 'var(--warn)';
+    return 'var(--accent)';
   }
-
-  const $ = id => document.getElementById(id);
-
-  function badgeClass(v) {
-    if (!v || v === 'ok') return 'badge-ok';
-    return 'badge-alerta';
+  if (type === 'lux') {
+    if (pct < 10) return 'var(--text3)';
+    return 'var(--lux)';
   }
+  return 'var(--accent)';
+}
 
-  function alertaTexto(v) {
-    const m = { ok:'✅ Normal', seco:'⚠️ Seco', exceso_agua:'⚠️ Exceso agua', humedo:'✅ Húmedo', poca_luz:'⚠️ Poca luz', exceso_luz:'⚠️ Exceso luz' };
-    return m[v] || v;
-  }
+// ── CHARTS ─────────────────────────────────────────────
+Chart.defaults.color = '#5a8a63';
+Chart.defaults.borderColor = '#1c3320';
+Chart.defaults.font.family = "'DM Mono', monospace";
+Chart.defaults.font.size = 10;
 
-  function visualInfo(e) {
-    const m = { sana:{i:'🌿',t:'Planta sana'}, amarilla:{i:'🟡',t:'Hojas amarillas'}, cafe:{i:'🟫',t:'Hojas marrones'}, indeterminado:{i:'❓',t:'Indeterminado'}, sin_datos:{i:'📷',t:'Sin imagen'} };
-    return m[e] || {i:'—',t:e||'—'};
-  }
-
-  function formatHora(ts) {
-    if (!ts) return '—';
-    const tsFixed = ts.includes('Z') || ts.includes('+') ? ts : ts + 'Z';
-    const d = new Date(tsFixed);
-    return d.toLocaleString('es-CO', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
-  }
-
-  async function fetchEstado() {
-    try {
-      const res  = await fetch(`${BACKEND}/api/estado`);
-      const data = await res.json();
-
-      $('conn-status').textContent = 'En línea';
-      $('dot').className = 'dot dot-verde';
-      $('ultima-actualizacion').textContent = formatHora(data.ultima_lectura);
-
-      const bien = data.estado_general === 'bien';
-      $('estado-icono').textContent = bien ? '🌿' : '⚠️';
-      $('estado-texto').textContent = bien ? 'Planta en buen estado' : 'Requiere atención';
-      $('estado-sub').textContent   = `Última lectura: ${formatHora(data.ultima_lectura)}`;
-
-      // Humedad superficial
-      const h = data.humedad_pct ?? 0;
-      $('humedad-pct').textContent = h + '%';
-      $('humedad-bar').style.width = h + '%';
-      $('humedad-bar').style.background = h < 20 ? '#ff6b6b' : h < 40 ? '#ffb347' : '#52b788';
-      $('humedad-badge').textContent = alertaTexto(data.alerta_humedad);
-      $('humedad-badge').className = 'badge ' + badgeClass(data.alerta_humedad);
-
-      // Suelo
-      const s = data.suelo_pct ?? 0;
-      $('suelo-pct').textContent = s + '%';
-      $('suelo-bar').style.width = s + '%';
-      $('suelo-bar').style.background = s < 20 ? '#ff6b6b' : s < 40 ? '#ffb347' : '#52b788';
-      $('suelo-badge').textContent = alertaTexto(data.alerta_suelo);
-      $('suelo-badge').className = 'badge ' + badgeClass(data.alerta_suelo);
-
-      // Luz
-      const lux = data.lux ?? 0;
-      $('lux-valor').textContent = Math.round(lux) + ' lx';
-      $('lux-bar').style.width = Math.min(lux / 800 * 100, 100) + '%';
-      $('lux-badge').textContent = alertaTexto(data.alerta_luz);
-      $('lux-badge').className = 'badge ' + badgeClass(data.alerta_luz);
-
-      // Visual
-      const vi = visualInfo(data.estado_visual);
-      $('estado-visual-icono').textContent = vi.i;
-      $('estado-visual-texto').textContent = vi.t;
-
-      // Foto actual
-      if (data.foto_url) {
-        $('foto-actual').src = data.foto_url;
-        $('foto-actual').style.display = 'block';
-        $('foto-placeholder').style.display = 'none';
-        $('foto-meta').textContent = `Capturada: ${formatHora(data.ultima_lectura)}`;
+const chartCfg = (labels, data, color, unit) => ({
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      data,
+      borderColor: color,
+      borderWidth: 2,
+      pointRadius: 3,
+      pointBackgroundColor: color,
+      pointBorderWidth: 0,
+      fill: true,
+      backgroundColor: (ctx) => {
+        const g = ctx.chart.ctx.createLinearGradient(0, 0, 0, 160);
+        g.addColorStop(0, color + '30');
+        g.addColorStop(1, color + '00');
+        return g;
+      },
+      tension: 0.4,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 600, easing: 'easeInOutQuart' },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1a0e',
+        borderColor: '#254529',
+        borderWidth: 1,
+        titleColor: '#4ade80',
+        bodyColor: '#9dbfa4',
+        callbacks: { label: ctx => ` ${ctx.raw}${unit}` }
       }
-
-      // Recomendaciones
-      const ul = $('rec-list');
-      ul.innerHTML = '';
-      (data.recomendaciones || ['Sin datos']).forEach(r => {
-        const li = document.createElement('li');
-        li.textContent = r;
-        if (r.includes('⚠️') || r.includes('🟡') || r.includes('🟫')) li.className = 'alerta';
-        ul.appendChild(li);
-      });
-
-    } catch(e) {
-      $('conn-status').textContent = 'Sin conexión';
-      $('dot').className = 'dot dot-naranja';
+    },
+    scales: {
+      x: { grid: { color: '#1c3320' }, ticks: { maxTicksLimit: 8 } },
+      y: { grid: { color: '#1c3320' }, ticks: { callback: v => v + unit } }
     }
   }
+});
 
-  async function fetchHistorial() {
-    try {
-      const res  = await fetch(`${BACKEND}/api/lecturas?limite=12`);
-      const data = await res.json();
-      const grid = $('historial-grid');
-      grid.innerHTML = '';
+let chartHumedad = null;
+let chartLux = null;
+let historialData = [];
+let humedadMode = 'rain';
 
-      if (!data.lecturas || data.lecturas.length === 0) {
-        grid.innerHTML = '<div style="opacity:0.5;font-size:0.85rem">Sin lecturas aún</div>';
-        return;
-      }
+function initCharts() {
+  const ctxH = $('chart-humedad').getContext('2d');
+  const ctxL = $('chart-lux').getContext('2d');
+  chartHumedad = new Chart(ctxH, chartCfg([], [], '#4ade80', '%'));
+  chartLux     = new Chart(ctxL, chartCfg([], [], '#fbbf24', ' lx'));
+}
 
-      // Actualizar porcentajes de color
-      if (data.lecturas[0]) {
-        const u = data.lecturas[0];
-        $('pct-verde').textContent    = u.color_verde    ?? '—';
-        $('pct-amarillo').textContent = u.color_amarillo ?? '—';
-        $('pct-cafe').textContent     = u.color_cafe     ?? '—';
-      }
+function setChartMode(chart, mode) {
+  humedadMode = mode;
+  document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  updateCharts(historialData);
+}
 
-      data.lecturas.forEach(l => {
-        const vi   = visualInfo(l.estado_visual);
-        const div  = document.createElement('div');
-        div.className = 'historial-item';
+function updateCharts(lecturas) {
+  if (!lecturas || !lecturas.length) return;
+  const reversed = [...lecturas].reverse();
+  const labels = reversed.map(l => fmtShort(l.created_at));
 
-        const fotoHTML = l.foto_url
-          ? `<img src="${l.foto_url}" alt="planta" loading="lazy">`
-          : `<div class="no-foto">📷</div>`;
+  // Humedad
+  const humData = humedadMode === 'rain'
+    ? reversed.map(l => l.humedad_pct ?? 0)
+    : reversed.map(l => l.suelo_pct ?? 0);
+  chartHumedad.data.labels = labels;
+  chartHumedad.data.datasets[0].data = humData;
+  chartHumedad.update();
 
-        div.innerHTML = `
-          ${fotoHTML}
-          <div class="historial-item-info">
-            <div class="hora">${formatHora(l.created_at)}</div>
-            <div class="datos">
-              ${vi.i} ${vi.t}<br>
-              💧 ${l.humedad_pct ?? '—'}% · 🌱 ${l.suelo_pct ?? '—'}% · ☀️ ${Math.round(l.lux ?? 0)} lx
-            </div>
-          </div>
-        `;
-        grid.appendChild(div);
-      });
+  // Lux
+  chartLux.data.labels = labels;
+  chartLux.data.datasets[0].data = reversed.map(l => Math.round(l.lux ?? 0));
+  chartLux.update();
+}
 
-    } catch(e) {
-      console.error('Error historial:', e);
+// ── FETCH ──────────────────────────────────────────────
+async function fetchEstado() {
+  try {
+    const res = await fetch(`${BACKEND}/api/estado`);
+    const d = await res.json();
+
+    // Nav
+    $('pulse-dot').className = 'pulse';
+    $('conn-label').textContent = 'En línea';
+    $('nav-time').textContent = fmt(d.ultima_lectura);
+
+    // Hero
+    const bien = d.estado_general === 'bien';
+    $('hero-icon').textContent = bien ? '🌿' : '⚠️';
+    $('hero-status').textContent = bien ? 'SISTEMA NOMINAL' : 'REQUIERE ATENCIÓN';
+    $('hero-title').textContent = bien ? 'Planta en buen estado' : 'Hay alertas activas';
+    $('hero-sub').textContent = `Última lectura: ${fmt(d.ultima_lectura)}`;
+
+    const tags = $('hero-tags');
+    tags.innerHTML = '';
+    const alertas = [
+      [d.alerta_humedad, 'Superficie'],
+      [d.alerta_suelo, 'Suelo'],
+      [d.alerta_luz, 'Luz'],
+    ];
+    alertas.forEach(([a, label]) => {
+      const [cls] = alertaTag(a);
+      const t = document.createElement('span');
+      t.className = `tag ${cls}`;
+      t.textContent = label + ': ' + (a === 'ok' ? 'Normal' : a.replace('_', ' '));
+      tags.appendChild(t);
+    });
+
+    // Foto
+    if (d.foto_url) {
+      $('foto-img').src = d.foto_url;
+      $('foto-img').style.display = 'block';
+      $('foto-placeholder').style.display = 'none';
+      $('foto-time').textContent = fmt(d.ultima_lectura);
     }
-  }
 
-  fetchEstado();
-  fetchHistorial();
-  setInterval(() => { fetchEstado(); fetchHistorial(); }, 30000);
+    // Métricas
+    const rain = d.humedad_pct ?? 0;
+    $('m-rain').innerHTML = `${rain}<span class="metric-unit">%</span>`;
+    $('bar-rain').style.width = rain + '%';
+    $('bar-rain').style.background = barColor(rain, 'humidity');
+    const [trc, trt] = alertaTag(d.alerta_humedad);
+    $('tag-rain').className = `tag ${trc}`;
+    $('tag-rain').textContent = trt;
+
+    const suelo = d.suelo_pct ?? 0;
+    $('m-suelo').innerHTML = `${suelo}<span class="metric-unit">%</span>`;
+    $('bar-suelo').style.width = suelo + '%';
+    $('bar-suelo').style.background = barColor(suelo, 'humidity');
+    const [tsc, tst] = alertaTag(d.alerta_suelo);
+    $('tag-suelo').className = `tag ${tsc}`;
+    $('tag-suelo').textContent = tst;
+
+    const lux = Math.round(d.lux ?? 0);
+    const luxPct = clamp(lux / 1000 * 100, 0, 100);
+    $('m-lux').innerHTML = `${lux}<span class="metric-unit">lx</span>`;
+    $('bar-lux').style.width = luxPct + '%';
+    const [tlc, tlt] = alertaTag(d.alerta_luz);
+    $('tag-lux').className = `tag ${tlc}`;
+    $('tag-lux').textContent = tlt;
+
+    // Visual
+    const vi = visualInfo(d.estado_visual);
+    $('visual-icon').textContent = vi.i;
+    $('visual-name').textContent = vi.n;
+
+    // Recomendaciones
+    const ul = $('rec-list');
+    ul.innerHTML = '';
+    (d.recomendaciones || []).forEach(r => {
+      const li = document.createElement('li');
+      const isOk = r.startsWith('✅');
+      li.className = `rec-item ${isOk ? 'ok' : 'warn'}`;
+      li.textContent = r;
+      ul.appendChild(li);
+    });
+
+  } catch(e) {
+    $('pulse-dot').className = 'pulse offline';
+    $('conn-label').textContent = 'Sin conexión';
+  }
+}
+
+async function fetchHistorial() {
+  try {
+    const res = await fetch(`${BACKEND}/api/lecturas?limite=20`);
+    const d = await res.json();
+    if (!d.lecturas) return;
+
+    historialData = d.lecturas;
+    updateCharts(d.lecturas);
+
+    // Actualizar colores del visual con la última lectura
+    if (d.lecturas[0]) {
+      const u = d.lecturas[0];
+      const setColor = (id, barId, val) => {
+        $(id).textContent = (val ?? '—') + (val != null ? '%' : '');
+        $(barId).style.width = (val ?? 0) + '%';
+      };
+      setColor('cv-verde', 'cf-verde', u.color_verde);
+      setColor('cv-amarillo', 'cf-amarillo', u.color_amarillo);
+      setColor('cv-cafe', 'cf-cafe', u.color_cafe);
+    }
+
+    // Historial visual
+    const grid = $('historial-grid');
+    grid.innerHTML = '';
+    d.lecturas.forEach(l => {
+      const vi = visualInfo(l.estado_visual);
+      const div = document.createElement('div');
+      div.className = 'hist-item';
+      div.innerHTML = l.foto_url
+        ? `<img class="hist-foto" src="${l.foto_url}" loading="lazy" alt="planta">`
+        : `<div class="hist-no-foto">📷</div>`;
+      div.innerHTML += `
+        <div class="hist-info">
+          <div class="hist-hora">${fmtShort(l.created_at)}</div>
+          <div class="hist-datos">${vi.i} ${vi.n}<br>💧${l.humedad_pct??'—'}% · 🌱${l.suelo_pct??'—'}% · ☀️${Math.round(l.lux??0)}lx</div>
+        </div>`;
+      grid.appendChild(div);
+    });
+
+  } catch(e) { console.error(e); }
+}
+
+// ── RELOJ ──────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  $('nav-time').textContent = now.toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+
+// ── INIT ───────────────────────────────────────────────
+async function fetchAll() { await fetchEstado(); await fetchHistorial(); }
+
+initCharts();
+fetchAll();
+setInterval(fetchAll, 30000);
+setInterval(updateClock, 1000);
 </script>
 </body>
 </html>
