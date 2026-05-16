@@ -52,7 +52,13 @@ def clasificar_planta(imagen_bytes: bytes) -> dict:
     pct_amarillo = round(cv2.countNonZero(mask_amarillo) / total * 100, 1)
     pct_cafe     = round(cv2.countNonZero(mask_cafe)     / total * 100, 1)
 
-    if pct_verde >= 25:      estado = "sana"
+    # Verificar brillo minimo
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    brillo = gray.mean()
+    if brillo < 30:
+        return {"estado_visual": "sin_luz", "verde": 0, "amarillo": 0, "cafe": 0}
+
+    if pct_verde >= 40:      estado = "sana"
     elif pct_amarillo >= 15: estado = "amarilla"
     elif pct_cafe >= 20:     estado = "cafe"
     else:                    estado = "indeterminado"
