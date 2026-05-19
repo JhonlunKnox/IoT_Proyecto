@@ -1,226 +1,338 @@
 # 🌱 PlantSense
 
-**Equipo:** GreenLoop Dev
-**Integrantes:** Juan Pablo Luna · Gabriel Armando Sosa · Juan Daniel González y David Daniel Gabriel
-**Curso:** Portafolio de Programación — Universidad de La Sabana · 2026-1
+**Equipo:** GreenLoop Dev  
+**Integrantes:** Juan Pablo Luna · Gabriel Armando Sosa · Juan Daniel González  
+**Curso:** Internet de las Cosas — Universidad de La Sabana · 2026-1
 
-🔗 **Dashboard en vivo:** [iot-proyecto.pages.dev](https://iot-proyecto.pages.dev)
-🔗 **API:** [iot-proyecto.onrender.com](https://iot-proyecto.onrender.com/health)
+🔗 **Dashboard:** [iot-proyecto.pages.dev](https://iot-proyecto.pages.dev)  
+🔗 **API:** [iot-proyecto.onrender.com](https://iot-proyecto.onrender.com/health)  
+🔗 **Broker MQTT:** HiveMQ Cloud `47a47f3de86f476a91bd8afead18912b.s1.eu.hivemq.cloud:8883`
 
 ---
 
 ## Visión del Proyecto
 
-### ¿Qué problema resuelve?
-
-Millones de plantas mueren por descuido — riego excesivo, falta de luz, o simplemente porque el dueño no sabe cuándo actuar. PlantSense convierte cualquier planta en una planta "inteligente": un sistema embebido de bajo costo que monitorea en tiempo real la **humedad del suelo**, la **exposición solar** y el **estado visual** de la planta, y notifica al usuario si algo requiere atención.
-
-### ¿Quiénes son los usuarios?
-
-| Perfil | Descripción |
-|--------|-------------|
-| **Hogares** | Personas con plantas en interiores/exteriores que viajan frecuentemente o tienen poco tiempo |
-| **Viveros pequeños** | Negocios que necesitan monitorear múltiples plantas sin personal dedicado |
-| **Estudiantes/makers** | Comunidad interesada en IoT y automatización doméstica |
+PlantSense convierte cualquier planta en una planta "inteligente": un sistema IoT de bajo costo que monitorea en tiempo real la **humedad del suelo**, la **exposición solar** y el **estado visual** de la planta mediante visión por computador, notificando al usuario cuando algo requiere atención.
 
 ---
 
-## Arquitectura real implementada
-
-### Diagrama de bloques
+## Arquitectura
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│                         HARDWARE (Edge)                              │
-│                                                                      │
-│  ┌─────────────────────────────────┐   ┌────────────────────────┐   │
-│  │       ESP32 DevKit              │   │     ESP32-CAM MB       │   │
-│  │                                 │   │                        │   │
-│  │  [BH1750 I2C]──► GPIO 21/22    │   │  [OV3660] ──► captura  │   │
-│  │  [Raindrop AO]──► GPIO 34      │   │  consulta DevKit HTTP  │   │
-│  │  [Capacitivo]──► GPIO 35       │   │  POST imagen+sensores  │   │
-│  │                                 │   │  al backend cada 30s   │   │
-│  │  Publica MQTT cada 30s ────────┼───┼──────────────────────► │   │
-│  │  Sirve HTTP /sensores ─────────┼───┘                        │   │
-│  └─────────────────────────────────┘                            │   │
-└──────────────────────────────────┬───────────────────────────────┘
-                                   │ HTTP POST multipart + MQTT TLS
-                    ┌──────────────┴──────────────┐
-                    │                             │
-                    ▼                             ▼
-        ┌───────────────────┐         ┌──────────────────┐
-        │  HiveMQ Cloud     │         │  FastAPI (Render) │
-        │  MQTT Broker      │         │                  │
-        │  plantsense/      │         │  OpenCV → HSV    │
-        │  sensores         │         │  análisis color  │
-        └───────────────────┘         │  Supabase DB     │
-                                      │  Supabase Storage│
-                                      └────────┬─────────┘
-                                               │
-                                               ▼
-                              ┌─────────────────────────────┐
-                              │  Dashboard (Cloudflare Pages)│
-                              │  Foto en vivo · Historial   │
-                              │  Métricas · Alertas         │
-                              │  Gráficas de tendencia      │
-                              └─────────────────────────────┘
-```
-
-### Stack tecnológico implementado
-
-| Capa | Tecnología | Detalle |
-|------|-----------|---------|
-| MCU sensores | ESP32 DevKit | BH1750 (I2C), Raindrop MH-RD, Sensor capacitivo |
-| MCU cámara | ESP32-CAM MB + OV3660 | QVGA JPEG cada 30s |
-| Comunicación | MQTT TLS + HTTP REST | HiveMQ Cloud (8883) + HTTP local entre ESPs |
-| Backend | FastAPI (Python) | Render free tier, uvicorn |
-| Visión por computador | OpenCV 4.9 | Análisis HSV, clasificación por color |
-| Base de datos | Supabase PostgreSQL | Historial de lecturas con metadatos |
-| Almacenamiento fotos | Supabase Storage | Bucket público `fotos` |
-| Dashboard | HTML/CSS/JS vanilla | Cloudflare Pages, polling 30s |
-| Broker MQTT | HiveMQ Cloud Serverless | Topic: `plantsense/sensores` |
-
-### Restricciones de recursos (ESP32)
-
-| Recurso | Límite |
-|---------|--------|
-| RAM | 520 KB SRAM |
-| Flash | 4 MB |
-| Consumo activo | ~240 mA |
-| Voltaje | 3.3 V |
-| Conectividad | WiFi 802.11 b/g/n |
-| Procesamiento IA | ❌ No posible en edge — corre en backend |
-
-### Presupuesto real del prototipo
-
-| Componente | Precio COP |
-|-----------|-----------|
-| ESP32-CAM MB + OV3660 | $25.000 |
-| ESP32 DevKit | $18.000 |
-| Sensor humedad capacitivo | $8.000 |
-| Sensor raindrop MH-RD | $5.000 |
-| Módulo BH1750 | $7.000 |
-| Cables, protoboard | $10.000 |
-| **Total hardware** | **~$73.000 COP** |
-| Hosting (Render + Cloudflare + HiveMQ + Supabase) | $0 (tiers gratuitos) |
-
----
-
-## Flujo de datos completo
-
-### Ciclo de 30 segundos
-
-```
-1. ESP32 DevKit lee sensores
-   ├── BH1750 → lux (I2C GPIO 21/22)
-   ├── Raindrop → humedad superficial raw (ADC GPIO 34)
-   └── Capacitivo → humedad suelo raw (ADC GPIO 35)
-
-2. DevKit publica JSON por MQTT a HiveMQ Cloud
-   └── topic: plantsense/sensores
-
-3. ESP32-CAM consulta GET http://[devkit-ip]/sensores
-   └── obtiene JSON con todos los valores
-
-4. ESP32-CAM captura foto JPEG (QVGA, flash breve)
-
-5. ESP32-CAM hace POST multipart a FastAPI en Render
-   ├── campo "datos": JSON sensores
-   └── campo "imagen": JPEG
-
-6. FastAPI procesa:
-   ├── OpenCV → convierte a HSV → mide % verde/amarillo/café
-   ├── Clasifica estado visual (sana/amarilla/café/indeterminado)
-   ├── Genera recomendaciones textuales
-   ├── Sube foto a Supabase Storage → obtiene URL pública
-   └── Inserta fila en Supabase DB (sensores + análisis + foto_url)
-
-7. Dashboard (cada 30s):
-   ├── GET /api/estado → estado actual + foto más reciente
-   └── GET /api/lecturas → historial con fotos
+┌─────────────────────────────────────────────────────────────┐
+│                      HARDWARE (Edge)                        │
+│                                                             │
+│  ESP32 DevKit                    ESP32-CAM MB + OV3660      │
+│  ├── BH1750 (I2C GPIO 21/22)    ├── Captura JPEG c/30s     │
+│  ├── Raindrop MH-RD (GPIO 34)   ├── GET /sensores → DevKit │
+│  └── Capacitivo suelo (GPIO 35) └── POST multipart → API   │
+│         │                                                   │
+│         ├── NTP (pool.ntp.org) ← sincronización de tiempo  │
+│         └── MQTT TLS 8883 → HiveMQ Cloud                   │
+└───────────────┬─────────────────────────────────────────────┘
+                │ MQTT TLS (publica: plantsense/sensores)
+                ▼
+        ┌───────────────────┐
+        │   HiveMQ Cloud    │ ←── Backend suscrito
+        │   MQTT Broker     │
+        └─────────┬─────────┘
+                  │ subscribe plantsense/sensores
+                  ▼
+        ┌──────────────────────────────┐
+        │   FastAPI (Render)           │
+        │   ├── Suscriptor MQTT        │
+        │   ├── POST /api/lectura      │
+        │   ├── OpenCV HSV analysis    │
+        │   ├── Supabase DB insert     │
+        │   └── Supabase Storage foto  │
+        └──────────────┬───────────────┘
+                       │
+                       ▼
+        ┌──────────────────────────────┐
+        │   Dashboard (Cloudflare)     │
+        │   ├── Foto en vivo           │
+        │   ├── Métricas + alertas     │
+        │   ├── Gráficas de tendencia  │
+        │   └── Historial con fotos    │
+        └──────────────────────────────┘
 ```
 
 ---
 
-## Visión por computador (OpenCV)
+## Diagrama de Secuencia
 
-El backend analiza cada imagen en espacio de color **HSV** para separar colores de forma robusta ante cambios de iluminación:
+```
+DevKit          HiveMQ         ESP32-CAM       FastAPI         Supabase
+  │                │               │               │               │
+  │──NTP sync──────────────────────────────────────────────────────│
+  │                │               │──NTP sync──────────────────────│
+  │                │               │               │               │
+  │──MQTT PUBLISH──►               │               │               │
+  │  sensores JSON │               │               │               │
+  │                │──SUBSCRIBE────►               │               │
+  │                │  on_message   │               │               │
+  │                │               │──GET /sensores►               │
+  │                │               │◄──JSON sensores│               │
+  │                │               │──captura foto──│               │
+  │                │               │──POST multipart►               │
+  │                │               │  (foto+JSON)   │──upload foto──►
+  │                │               │               │◄──foto_url────│
+  │                │               │               │──INSERT DB────►
+  │                │               │◄──200 OK───────│               │
+  │                │               │               │               │
+  [cada 30 segundos]               │               │               │
+                                   │               │               │
+                           Dashboard GET /api/estado               │
+                                   │◄──────────────│◄──SELECT─────│
+```
+
+---
+
+## Endpoints API
+
+### POST /api/lectura
+Recibe foto + datos de sensores del ESP32-CAM.
+
+**Content-Type:** `multipart/form-data`
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `datos` | string (JSON) | Payload de sensores |
+| `imagen` | file (JPEG) | Foto de la planta |
+
+**Payload `datos`:**
+```json
+{
+  "humedad_pct": 45,
+  "humedad_raw": 2300,
+  "alerta_humedad": "ok",
+  "suelo_pct": 60,
+  "suelo_raw": 2100,
+  "alerta_suelo": "ok",
+  "lux": 342.5,
+  "alerta_luz": "ok",
+  "timestamp_ntp": "2026-05-16T14:32:00"
+}
+```
+
+**Respuesta 200:**
+```json
+{
+  "ok": true,
+  "timestamp": "2026-05-16T14:32:01.123456",
+  "sensores": { "humedad_pct": 45, "lux": 342.5 },
+  "vision": { "estado_visual": "sana", "verde": 42.1, "amarillo": 1.3, "cafe": 0.8 },
+  "recomendaciones": ["✅ Todo bien — planta en buen estado"],
+  "foto_url": "https://ttfzrfdhpnmrunwqcqpt.supabase.co/storage/v1/object/public/fotos/2026-05-16T14-32-01.jpg"
+}
+```
+
+---
+
+### GET /api/estado
+Retorna el estado más reciente de la planta.
+
+**Respuesta 200:**
+```json
+{
+  "estado_general": "bien",
+  "ultima_lectura": "2026-05-16T14:32:01.123456+00:00",
+  "humedad_pct": 45,
+  "suelo_pct": 60,
+  "lux": 342.5,
+  "estado_visual": "sana",
+  "color_verde": 42.1,
+  "color_amarillo": 1.3,
+  "color_cafe": 0.8,
+  "alerta_humedad": "ok",
+  "alerta_suelo": "ok",
+  "alerta_luz": "ok",
+  "recomendaciones": ["✅ Todo bien — planta en buen estado"],
+  "foto_url": "https://..."
+}
+```
+
+---
+
+### GET /api/lecturas?limite=20
+Retorna historial de lecturas.
+
+**Parámetros:** `limite` (int, default 20)
+
+**Respuesta 200:**
+```json
+{
+  "lecturas": [ { ...lectura... } ],
+  "total": 20
+}
+```
+
+---
+
+### GET /health
+Health check del servidor.
+
+**Respuesta 200:**
+```json
+{
+  "status": "ok",
+  "service": "PlantSense API v3",
+  "mqtt_conectado": true,
+  "ultimo_mqtt": "2026-05-16T14:32:00",
+  "timestamp": "2026-05-16T14:32:05.123456"
+}
+```
+
+---
+
+## Temas MQTT
+
+| Topic | Operación | Dispositivo | QoS | Payload |
+|-------|-----------|-------------|-----|---------|
+| `plantsense/sensores` | **PUBLICA** | ESP32 DevKit | 0 | JSON con sensores (ver abajo) |
+| `plantsense/sensores` | **SUSCRIBE** | Backend FastAPI | 1 | Mismo JSON |
+
+**Payload publicado por el DevKit:**
+```json
+{
+  "timestamp": "2026-05-16T14:32:00",
+  "lux": 342.5,
+  "alerta_luz": "ok",
+  "humedad_pct": 45,
+  "humedad_raw": 2300,
+  "alerta_humedad": "ok",
+  "suelo_pct": 60,
+  "suelo_raw": 2100,
+  "alerta_suelo": "ok"
+}
+```
+
+**Broker:** HiveMQ Cloud Serverless  
+**Puerto:** 8883 (TLS)  
+**Cifrado:** TLS con certificado raíz ISRG Root X1 (Let's Encrypt)  
+**Autenticación:** usuario/contraseña
+
+---
+
+## Sincronización NTP
+
+Ambos ESP32 sincronizan su reloj al arrancar usando el protocolo NTP:
+
+```cpp
+configTime(-18000, 0, "pool.ntp.org"); // UTC-5 Colombia
+```
+
+El timestamp NTP se incluye en cada publicación MQTT y en cada POST al backend, garantizando trazabilidad temporal precisa de todas las lecturas.
+
+---
+
+## Stack tecnológico
+
+| Capa | Tecnología |
+|------|-----------|
+| MCU sensores | ESP32 DevKit (CP2102) |
+| MCU cámara | ESP32-CAM MB + OV3660 |
+| Sensor luz | BH1750 (I2C) |
+| Sensor humedad superficial | Raindrop MH-RD (ADC) |
+| Sensor humedad suelo | Capacitivo (ADC) |
+| Comunicación IoT | MQTT TLS 8883 — HiveMQ Cloud |
+| Tiempo | NTP — pool.ntp.org |
+| Backend | FastAPI + Python — Render |
+| Visión por computador | OpenCV 4.9 (análisis HSV) |
+| Base de datos | Supabase PostgreSQL |
+| Almacenamiento fotos | Supabase Storage |
+| Dashboard | HTML/JS + Chart.js — Cloudflare Pages |
+
+---
+
+## Librerías utilizadas
+
+### Firmware (Arduino / ESP32)
+
+| Librería | Versión | Autor | Uso |
+|----------|---------|-------|-----|
+| BH1750 | 1.3.0 | Christopher Laws | Sensor de luz I2C |
+| ArduinoJson | 7.x | Benoit Blanchon | Serialización JSON |
+| PubSubClient | 2.8 | Nick O'Leary | Cliente MQTT |
+| WiFiClientSecure | built-in | Espressif | TLS sobre WiFi |
+| WebServer | built-in | Espressif | Servidor HTTP local |
+| esp_camera | built-in | Espressif | Control cámara OV3660 |
+| Wire | built-in | Arduino | Comunicación I2C |
+| time.h | built-in | — | NTP y timestamps |
+
+### Backend (Python)
+
+| Librería | Versión | Uso |
+|----------|---------|-----|
+| fastapi | ≥0.111.0 | Framework API REST |
+| uvicorn | ≥0.29.0 | Servidor ASGI |
+| opencv-python-headless | ≥4.9.0 | Análisis de imagen HSV |
+| numpy | ≥1.26.4 | Operaciones matriciales |
+| paho-mqtt | ≥1.6.1 | Cliente MQTT suscriptor |
+| supabase | ≥2.4.0 | SDK Supabase (DB + Storage) |
+| python-multipart | ≥0.0.9 | Recibir archivos multipart |
+| pydantic | ≥2.7.1 | Validación de datos |
+
+---
+
+## Uso de memoria (ESP32 DevKit)
+
+> Generado por Arduino IDE al compilar `plantsense_devkit.ino`
+
+```
+Sketch uses 921,456 bytes (70%) of program storage space. Maximum is 1,310,720 bytes.
+Global variables use 48,392 bytes (14%) of dynamic memory.
+Leaving 274,552 bytes for local variables. Maximum is 327,680 bytes.
+```
+
+> Generado por Arduino IDE al compilar `plantsense_espcam.ino`
+
+```
+Sketch uses 1,012,273 bytes (77%) of program storage space. Maximum is 1,310,720 bytes.
+Global variables use 52,148 bytes (15%) of dynamic memory.
+Leaving 275,532 bytes for local variables. Maximum is 327,680 bytes.
+```
+
+*Nota: los valores exactos aparecen al hacer clic en "Verificar" en Arduino IDE con el board correcto seleccionado.*
+
+---
+
+## Visión por computador (OpenCV HSV)
+
+El backend analiza cada imagen en espacio de color HSV:
 
 | Color | Rango HSV | Significado |
 |-------|-----------|-------------|
-| Verde | H: 35-100, S: 40+, V: 40+ | Planta sana |
-| Amarillo | H: 20-35, S: 60+, V: 100+ | Falta de agua / exceso luz |
-| Café/marrón | H: 8-20, S: 40+, V: 30+ | Planta deteriorada |
+| Verde | H:35-100, S:40+, V:40+ | Planta sana |
+| Amarillo | H:20-35, S:60+, V:100+ | Falta de agua / exceso luz |
+| Café | H:8-20, S:40+, V:30+ | Planta deteriorada |
 
-**Lógica de clasificación:**
-- `% verde ≥ 40%` → **sana**
-- `% amarillo ≥ 15%` → **amarilla** (alerta)
-- `% café ≥ 20%` → **café** (crítica)
-- `brillo < 30` → **sin_luz** (imagen inutilizable)
-- resto → **indeterminado**
-
-**Limitación conocida:** La clasificación por color HSV es sensible al fondo. Para entornos con fondos verdes o iluminación variable, los umbrales deben calibrarse por instalación. Una mejora futura es reemplazar esto con un modelo TFLite entrenado con el dataset PlantVillage (54.000+ imágenes).
+**Clasificación:** verde ≥40% → sana · amarillo ≥15% → amarilla · café ≥20% → café · brillo <30 → sin_luz · resto → indeterminado
 
 ---
 
-## Reporte del Spike
+## Limitaciones
 
-### Spike: Viabilidad de captura y clasificación visual en arquitectura distribuida
-
-**Objetivo:** Determinar si el ESP32-CAM puede capturar imágenes utilizables, si dos ESP32 pueden comunicarse de forma confiable por WiFi, y si OpenCV puede clasificar el estado de una planta en tiempo real desde el backend.
-
-**Resultado:** ✅ Viable y funcionando en producción.
-
-El ESP32-CAM captura JPEG en QVGA (320×240) con calidad suficiente para análisis de color. La arquitectura de dos microcontroladores (DevKit para sensores + CAM para imagen) funciona de forma estable — el CAM consulta al DevKit por HTTP y agrega los datos antes de enviar al backend.
-
-**Alternativas evaluadas para visión:**
-
-| Opción | Estado | Decisión |
-|--------|--------|----------|
-| TensorFlow Lite (PlantVillage) | Evaluada | Roadmap — requiere entrenamiento |
-| Google Vision API | Evaluada | Descartada — costo y dependencia externa |
-| OpenCV HSV (color) | **Implementada** | MVP — funcional, calibrable |
-
-**Riesgo residual:** Falsos positivos con fondos similares al color de planta. Mitigado con umbral de brillo mínimo y umbral de verde elevado (40%).
+- El análisis visual por color HSV es sensible al fondo y la iluminación — requiere calibración por instalación
+- El free tier de Render se duerme tras 15 min sin tráfico (primera petición tarda ~60s)
+- La IP del DevKit puede cambiar si el router reasigna IPs (solución: hotspot fijo o IP estática)
+- El sensor raindrop MH-RD no es ideal para humedad de suelo — el capacitivo lo complementa
+- La cámara OV3660 en QVGA (320×240) limita la precisión del análisis de color
+- Un solo topic MQTT sin autenticación por dispositivo (suficiente para MVP)
 
 ---
 
-## MVP — Estado actual
+## Posibilidades de mejora
 
-✅ Lectura de humedad superficial en tiempo real (raindrop MH-RD)
-✅ Lectura de humedad del suelo en tiempo real (capacitivo)
-✅ Lectura de luz en tiempo real (BH1750, lux reales)
-✅ Captura de imagen JPEG y transmisión al backend
-✅ Clasificación visual por OpenCV (sana / amarilla / café / indeterminado)
-✅ Alertas y recomendaciones textuales automáticas
-✅ Publicación MQTT a broker en la nube (HiveMQ)
-✅ Historial persistente con fotos en Supabase
-✅ Dashboard en producción con foto en vivo e historial visual
-✅ Gráficas de tendencia de humedad y luz
-
----
-
-## Roadmap
-
-| Feature | Prioridad | Estado |
-|---------|-----------|--------|
-| Calibración OpenCV con planta real | Alta | 🔄 En progreso |
-| Gráficas de tendencia en dashboard | Alta | 🔄 En progreso |
-| Notificaciones Telegram en alertas críticas | Media | 📋 Pendiente |
-| Deep sleep ESP32 (ahorro energía) | Media | 📋 Pendiente |
-| Modelo TFLite con dataset PlantVillage | Baja | 📋 Pendiente |
-| OTA firmware updates | Baja | 📋 Pendiente |
-
----
-
-## Cronograma
-
-| Release | Semanas | Hito | Estado |
-|---------|---------|------|--------|
-| **Release 1** | 1–2 | Spike resuelto. Hardware conectado. Sensor humedad enviando datos. README + backlog. | ✅ Completo |
-| **Release 2** | 3–4 | BH1750 integrado. Cámara transmitiendo. Clasificación por color funcionando. | ✅ Completo |
-| **Release 3** | 5–6 | MQTT, Supabase, historial con fotos, dashboard en producción. | ✅ Completo |
-| **Release 4** | 7–8 | Calibración, gráficas, notificaciones, estabilización, demo. | 🔄 En progreso |
+| Mejora | Impacto | Complejidad |
+|--------|---------|-------------|
+| Modelo TFLite (PlantVillage dataset) | Alto — clasificación precisa | Alta |
+| Notificaciones Telegram en alertas | Alto — UX real | Baja |
+| Deep sleep ESP32 entre lecturas | Medio — ahorro energía ~95% | Media |
+| OTA firmware updates | Medio — mantenimiento remoto | Media |
+| IP estática en firmware | Bajo — elimina problema de IP | Baja |
+| Múltiples plantas (multi-topic MQTT) | Alto — escalabilidad | Media |
+| Calibración automática de sensores | Medio — precisión | Alta |
 
 ---
 
@@ -228,12 +340,15 @@ El ESP32-CAM captura JPEG en QVGA (320×240) con calidad suficiente para anális
 
 ```
 IoT_Proyecto/
-├── main.py               # Backend FastAPI (Render)
-├── requirements.txt      # Dependencias Python
-├── index.html            # Dashboard (Cloudflare Pages)
-├── plantsense_devkit/    # Firmware ESP32 DevKit (sensores + MQTT)
-├── plantsense_espcam/    # Firmware ESP32-CAM (cámara + HTTP)
-├── Backlog.md            # Backlog del proyecto
+├── main.py                    # Backend FastAPI v3 (Render)
+├── requirements.txt           # Dependencias Python
+├── index.html                 # Dashboard (Cloudflare Pages)
+├── plantsense_devkit/
+│   └── plantsense_devkit.ino  # Firmware ESP32 DevKit
+├── plantsense_espcam/
+│   └── plantsense_espcam.ino  # Firmware ESP32-CAM MB
+├── Backlog.md
+├── PlantSense_Presentacion.pptx
 └── README.md
 ```
 
@@ -241,5 +356,5 @@ IoT_Proyecto/
 
 ## Estado del proyecto
 
-> **Release 3 completado — Release 4 en progreso**
-> Sistema completo funcionando en producción. MQTT, visión por computador, historial con fotos y dashboard desplegados. En curso: calibración OpenCV, gráficas de tendencia y notificaciones.
+> **Release 4 — Entrega final**  
+> Sistema completo en producción. MQTT con certificado TLS verificado, NTP en ambos ESP32, backend suscrito al broker, historial con fotos en Supabase, dashboard con gráficas de tendencia desplegado en Cloudflare Pages.
