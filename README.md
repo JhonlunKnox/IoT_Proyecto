@@ -1,7 +1,7 @@
 # 🌱 PlantSense
 
 **Equipo:** GreenLoop Dev  
-**Integrantes:** Juan Pablo Luna · Gabriel Armando Sosa · Juan Daniel González  
+**Integrantes:** Juan Pablo Luna · Gabriel Armando Sosa · Juan Daniel González · Daniel David Gabriel
 **Curso:** Internet de las Cosas — Universidad de La Sabana · 2026-1
 
 🔗 **Dashboard:** [iot-proyecto.pages.dev](https://iot-proyecto.pages.dev)  
