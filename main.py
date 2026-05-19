@@ -1,25 +1,95 @@
 """
-PlantSense — Backend FastAPI v2
-MQTT + Supabase + Fotos + Historial
+PlantSense — Backend FastAPI v3
+- Suscrito a MQTT (HiveMQ Cloud) para recibir datos de sensores
+- Recibe imagen del ESP32-CAM por HTTP POST multipart
+- Analiza imagen con OpenCV (HSV)
+- Almacena en Supabase (DB + Storage fotos)
 
 Endpoints:
-  POST /api/lectura     → recibe sensores + imagen (multipart)
-  GET  /api/estado      → estado actual
-  GET  /api/lecturas    → historial con fotos
-  GET  /health          → health check
+  POST /api/lectura       → imagen + sensores (multipart)
+  GET  /api/estado        → lectura más reciente
+  GET  /api/lecturas      → historial
+  GET  /health            → healthcheck
 """
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 import cv2
 import numpy as np
 import json
-import os
+import threading
+import ssl
+import paho.mqtt.client as mqtt_client
 from datetime import datetime
 from supabase import create_client, Client
 
-app = FastAPI(title="PlantSense API v2")
+# ─── SUPABASE ─────────────────────────────────────────────────────────────────
+SUPABASE_URL = "https://ttfzrfdhpnmrunwqcqpt.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZnpyZmRocG5tcnVud3FjcXB0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODg4NDgxOCwiZXhwIjoyMDk0NDYwODE4fQ.VxYRtgShmlHqTxMrza3uHVZct6VzqSF5TDjvwmFBkT4"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ─── MQTT CONFIG ──────────────────────────────────────────────────────────────
+MQTT_HOST   = "47a47f3de86f476a91bd8afead18912b.s1.eu.hivemq.cloud"
+MQTT_PORT   = 8883
+MQTT_USER   = "juanluzu"
+MQTT_PASS   = "Reach2001."
+MQTT_TOPIC  = "plantsense/sensores"
+
+# Último estado recibido por MQTT (en memoria)
+ultimo_mqtt: dict = {}
+
+# ─── MQTT CLIENT ──────────────────────────────────────────────────────────────
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print(f"[MQTT] Conectado al broker — suscrito a {MQTT_TOPIC}")
+        client.subscribe(MQTT_TOPIC, qos=1)
+    else:
+        print(f"[MQTT] Error de conexión rc={rc}")
+
+def on_message(client, userdata, msg):
+    global ultimo_mqtt
+    try:
+        payload = json.loads(msg.payload.decode())
+        ultimo_mqtt = payload
+        print(f"[MQTT] Recibido: {payload}")
+
+        # Guardar lectura de sensores en Supabase (sin foto)
+        supabase.table("lecturas").insert({
+            "humedad_pct":    payload.get("humedad_pct"),
+            "humedad_raw":    payload.get("humedad_raw"),
+            "suelo_pct":      payload.get("suelo_pct"),
+            "suelo_raw":      payload.get("suelo_raw"),
+            "lux":            payload.get("lux"),
+            "alerta_humedad": payload.get("alerta_humedad"),
+            "alerta_suelo":   payload.get("alerta_suelo"),
+            "alerta_luz":     payload.get("alerta_luz"),
+            "recomendaciones": generar_recomendaciones(payload),
+        }).execute()
+    except Exception as e:
+        print(f"[MQTT] Error procesando mensaje: {e}")
+
+def iniciar_mqtt():
+    client = mqtt_client.Client(client_id="plantsense-backend", protocol=mqtt_client.MQTTv311)
+    client.username_pw_set(MQTT_USER, MQTT_PASS)
+    client.tls_set(tls_version=ssl.PROTOCOL_TLS)
+    client.on_connect = on_connect
+    client.on_message = on_message
+    try:
+        client.connect(MQTT_HOST, MQTT_PORT, keepalive=60)
+        client.loop_forever()
+    except Exception as e:
+        print(f"[MQTT] No se pudo conectar: {e}")
+
+# ─── LIFESPAN (arranca MQTT al iniciar FastAPI) ───────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    thread = threading.Thread(target=iniciar_mqtt, daemon=True)
+    thread.start()
+    print("[OK] Hilo MQTT iniciado")
+    yield
+
+app = FastAPI(title="PlantSense API v3", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,12 +98,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ─── SUPABASE ─────────────────────────────────────────────────────────────────
-SUPABASE_URL = "https://ttfzrfdhpnmrunwqcqpt.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZnpyZmRocG5tcnVud3FjcXB0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODg4NDgxOCwiZXhwIjoyMDk0NDYwODE4fQ.VxYRtgShmlHqTxMrza3uHVZct6VzqSF5TDjvwmFBkT4"
-
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 # ─── OPENCV ───────────────────────────────────────────────────────────────────
 def clasificar_planta(imagen_bytes: bytes) -> dict:
     nparr = np.frombuffer(imagen_bytes, np.uint8)
@@ -41,7 +105,11 @@ def clasificar_planta(imagen_bytes: bytes) -> dict:
     if img is None:
         return {"estado_visual": "sin_datos", "verde": 0, "amarillo": 0, "cafe": 0}
 
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if gray.mean() < 30:
+        return {"estado_visual": "sin_luz", "verde": 0, "amarillo": 0, "cafe": 0}
+
+    hsv   = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     total = img.shape[0] * img.shape[1]
 
     mask_verde    = cv2.inRange(hsv, (35, 40, 40), (85, 255, 255))
@@ -51,12 +119,6 @@ def clasificar_planta(imagen_bytes: bytes) -> dict:
     pct_verde    = round(cv2.countNonZero(mask_verde)    / total * 100, 1)
     pct_amarillo = round(cv2.countNonZero(mask_amarillo) / total * 100, 1)
     pct_cafe     = round(cv2.countNonZero(mask_cafe)     / total * 100, 1)
-
-    # Verificar brillo minimo
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    brillo = gray.mean()
-    if brillo < 30:
-        return {"estado_visual": "sin_luz", "verde": 0, "amarillo": 0, "cafe": 0}
 
     if pct_verde >= 40:      estado = "sana"
     elif pct_amarillo >= 15: estado = "amarilla"
@@ -83,8 +145,13 @@ def generar_recomendaciones(datos: dict) -> list:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "PlantSense API v2"}
-
+    return {
+        "status": "ok",
+        "service": "PlantSense API v3",
+        "mqtt_conectado": True,
+        "ultimo_mqtt": ultimo_mqtt.get("timestamp", "sin datos"),
+        "timestamp": datetime.utcnow().isoformat()
+    }
 
 @app.post("/api/lectura")
 async def recibir_lectura(
@@ -97,30 +164,23 @@ async def recibir_lectura(
         raise HTTPException(status_code=400, detail="JSON inválido")
 
     img_bytes = await imagen.read()
-
-    # Analizar imagen
-    analisis = clasificar_planta(img_bytes)
-
-    # Subir foto a Supabase Storage
-    timestamp = datetime.utcnow().isoformat()
-    foto_nombre = f"{timestamp.replace(':', '-')}.jpg"
-    foto_url = None
-
-    try:
-        res = supabase.storage.from_("fotos").upload(
-            foto_nombre,
-            img_bytes,
-            {"content-type": "image/jpeg"}
-        )
-        foto_url = f"{SUPABASE_URL}/storage/v1/object/public/fotos/{foto_nombre}"
-    except Exception as e:
-        print(f"[ERROR] No se pudo subir foto: {e}")
-
-    # Combinar datos
+    analisis  = clasificar_planta(img_bytes)
     datos_completos = {**sensor_data, **analisis}
     recomendaciones = generar_recomendaciones(datos_completos)
 
-    # Guardar en Supabase DB
+    # Subir foto a Supabase Storage
+    timestamp   = datetime.utcnow().isoformat()
+    foto_nombre = f"{timestamp.replace(':', '-')}.jpg"
+    foto_url    = None
+    try:
+        supabase.storage.from_("fotos").upload(
+            foto_nombre, img_bytes, {"content-type": "image/jpeg"}
+        )
+        foto_url = f"{SUPABASE_URL}/storage/v1/object/public/fotos/{foto_nombre}"
+    except Exception as e:
+        print(f"[ERROR] Storage: {e}")
+
+    # Guardar en DB
     try:
         supabase.table("lecturas").insert({
             "humedad_pct":    sensor_data.get("humedad_pct"),
@@ -139,7 +199,7 @@ async def recibir_lectura(
             "foto_url":       foto_url,
         }).execute()
     except Exception as e:
-        print(f"[ERROR] Supabase insert: {e}")
+        print(f"[ERROR] DB: {e}")
 
     return {
         "ok": True,
@@ -150,19 +210,13 @@ async def recibir_lectura(
         "foto_url": foto_url,
     }
 
-
 @app.get("/api/estado")
 def obtener_estado():
     try:
         res = supabase.table("lecturas") \
-            .select("*") \
-            .order("created_at", desc=True) \
-            .limit(1) \
-            .execute()
-
+            .select("*").order("created_at", desc=True).limit(1).execute()
         if not res.data:
             return {"estado": "sin_datos"}
-
         datos = res.data[0]
         recomendaciones = generar_recomendaciones(datos)
         hay_alerta = (
@@ -170,7 +224,6 @@ def obtener_estado():
             datos.get("alerta_luz") != "ok" or
             datos.get("estado_visual") in ("amarilla", "cafe")
         )
-
         return {
             "estado_general":  "alerta" if hay_alerta else "bien",
             "ultima_lectura":  datos.get("created_at"),
@@ -178,6 +231,9 @@ def obtener_estado():
             "suelo_pct":       datos.get("suelo_pct"),
             "lux":             datos.get("lux"),
             "estado_visual":   datos.get("estado_visual"),
+            "color_verde":     datos.get("color_verde"),
+            "color_amarillo":  datos.get("color_amarillo"),
+            "color_cafe":      datos.get("color_cafe"),
             "alerta_humedad":  datos.get("alerta_humedad"),
             "alerta_suelo":    datos.get("alerta_suelo"),
             "alerta_luz":      datos.get("alerta_luz"),
@@ -187,15 +243,11 @@ def obtener_estado():
     except Exception as e:
         return {"estado": "error", "detalle": str(e)}
 
-
 @app.get("/api/lecturas")
 def obtener_lecturas(limite: int = 20):
     try:
         res = supabase.table("lecturas") \
-            .select("*") \
-            .order("created_at", desc=True) \
-            .limit(limite) \
-            .execute()
+            .select("*").order("created_at", desc=True).limit(limite).execute()
         return {"lecturas": res.data, "total": len(res.data)}
     except Exception as e:
         return {"lecturas": [], "error": str(e)}
