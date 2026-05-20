@@ -52,20 +52,8 @@ def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
         ultimo_mqtt = payload
-        print(f"[MQTT] Recibido: {payload}")
-
-        # Guardar lectura de sensores en Supabase (sin foto)
-        supabase.table("lecturas").insert({
-            "humedad_pct":    payload.get("humedad_pct"),
-            "humedad_raw":    payload.get("humedad_raw"),
-            "suelo_pct":      payload.get("suelo_pct"),
-            "suelo_raw":      payload.get("suelo_raw"),
-            "lux":            payload.get("lux"),
-            "alerta_humedad": payload.get("alerta_humedad"),
-            "alerta_suelo":   payload.get("alerta_suelo"),
-            "alerta_luz":     payload.get("alerta_luz"),
-            "recomendaciones": generar_recomendaciones(payload),
-        }).execute()
+        print(f"[MQTT] Recibido en memoria: {payload}")
+        # Solo actualiza estado en memoria — la DB se actualiza con el POST /api/lectura (con foto)
     except Exception as e:
         print(f"[MQTT] Error procesando mensaje: {e}")
 
