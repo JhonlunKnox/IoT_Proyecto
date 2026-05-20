@@ -113,7 +113,7 @@ def clasificar_planta(imagen_bytes: bytes) -> dict:
     pct_amarillo = round(cv2.countNonZero(mask_amarillo) / total * 100, 1)
     pct_cafe     = round(cv2.countNonZero(mask_cafe)     / total * 100, 1)
 
-    if pct_verde >= 25:      estado = "sana"
+    if pct_verde >= 15:      estado = "sana"
     elif pct_amarillo >= 12: estado = "amarilla"
     elif pct_cafe >= 15:     estado = "cafe"
     else:                    estado = "indeterminado"
