@@ -100,22 +100,21 @@ def clasificar_planta(imagen_bytes: bytes) -> dict:
     hsv   = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     total = img.shape[0] * img.shape[1]
 
-    # Rangos ajustados para OV3660 QVGA con poca luz:
-    # - Baja saturacion (S desde 15) para capturar verdes apagados
-    # - Baja luminosidad (V desde 15) para imagenes oscuras
-    # - Verde oscuro de sansevieria/plantas de interior incluido
-    mask_verde1   = cv2.inRange(hsv, (35, 15, 15), (85, 255, 255))   # verde normal
-    mask_verde2   = cv2.inRange(hsv, (85, 10, 10), (100, 255, 180))  # verde azulado oscuro
+    # Rangos calibrados para OV3660 QVGA — planta sansevieria interior
+    # S >= 35 para evitar grises y ruido de fondo oscuro
+    # V >= 25 para incluir verdes oscuros de interior
+    mask_verde1   = cv2.inRange(hsv, (35, 35, 25), (85, 255, 255))   # verde normal
+    mask_verde2   = cv2.inRange(hsv, (85, 25, 25), (100, 255, 180))  # verde azulado oscuro
     mask_verde    = cv2.bitwise_or(mask_verde1, mask_verde2)
-    mask_amarillo = cv2.inRange(hsv, (20, 40, 60), (35, 255, 255))   # amarillo con menos saturacion
-    mask_cafe     = cv2.inRange(hsv, (8, 30, 20), (20, 200, 180))    # cafe/marron oscuro
+    mask_amarillo = cv2.inRange(hsv, (20, 50, 80), (35, 255, 255))
+    mask_cafe     = cv2.inRange(hsv, (8, 40, 30), (20, 200, 180))
 
     pct_verde    = round(cv2.countNonZero(mask_verde)    / total * 100, 1)
     pct_amarillo = round(cv2.countNonZero(mask_amarillo) / total * 100, 1)
     pct_cafe     = round(cv2.countNonZero(mask_cafe)     / total * 100, 1)
 
-    # Umbrales bajos para camara de baja resolucion con poca luz
-    if pct_verde >= 20:      estado = "sana"
+    # Planta ocupa ~30-40% del frame en QVGA apuntando de cerca
+    if pct_verde >= 30:      estado = "sana"
     elif pct_amarillo >= 12: estado = "amarilla"
     elif pct_cafe >= 15:     estado = "cafe"
     else:                    estado = "indeterminado"
