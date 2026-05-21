@@ -25,15 +25,15 @@ from datetime import datetime
 from supabase import create_client, Client
 
 # ─── SUPABASE ─────────────────────────────────────────────────────────────────
-SUPABASE_URL = "https://ttfzrfdhpnmrunwqcqpt.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR0ZnpyZmRocG5tcnVud3FjcXB0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODg4NDgxOCwiZXhwIjoyMDk0NDYwODE4fQ.VxYRtgShmlHqTxMrza3uHVZct6VzqSF5TDjvwmFBkT4"
+SUPABASE_URL = "*******"
+SUPABASE_KEY = "************************"
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ─── MQTT CONFIG ──────────────────────────────────────────────────────────────
-MQTT_HOST   = "47a47f3de86f476a91bd8afead18912b.s1.eu.hivemq.cloud"
-MQTT_PORT   = 8883
-MQTT_USER   = "juanluzu"
-MQTT_PASS   = "Reach2001."
+MQTT_HOST   = "********************"
+MQTT_PORT   = ****
+MQTT_USER   = "******"
+MQTT_PASS   = "************"
 MQTT_TOPIC  = "plantsense/sensores"
 
 # Último estado recibido por MQTT (en memoria)
